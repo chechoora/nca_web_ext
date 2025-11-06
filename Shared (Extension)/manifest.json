@@ -1,0 +1,47 @@
+{
+    "manifest_version": 3,
+    "name": "Telegram Channel Blocker",
+    "version": "1.0",
+    "description": "Block specific Telegram channels from loading",
+    
+    "permissions": [
+        "storage",
+        "activeTab",
+        "tabs"
+    ],
+    
+    "host_permissions": [
+        "*://t.me/*",
+        "*://telegram.org/*",
+        "*://web.telegram.org/*"
+    ],
+    
+    "background": {
+        "scripts": ["background.js"],
+        "persistent": false
+    },
+    
+    "content_scripts": [{
+        "matches": [
+            "*://t.me/*",
+            "*://telegram.org/*", 
+            "*://web.telegram.org/*"
+        ],
+        "js": ["content.js"],
+        "run_at": "document_start"
+    }],
+    
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "Telegram Channel Blocker"
+    },
+    
+    "web_accessible_resources": [{
+        "resources": ["*"],
+        "matches": [
+            "*://t.me/*",
+            "*://telegram.org/*",
+            "*://web.telegram.org/*"
+        ]
+    }]
+}
