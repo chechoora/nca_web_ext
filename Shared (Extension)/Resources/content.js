@@ -100,10 +100,24 @@ class TelegramChannelBlocker {
             }
         }
 
+        // IMPORTANT: Check for private chats first (positive numbers) - these are NOT channels
+        // Private chats look like: web.telegram.org/a/#373670494 (positive number)
+        const privateChatPattern = /[#\/](\d+)(?:[?/]|$)/;
+        const privateChatMatch = url.match(privateChatPattern);
+        if (privateChatMatch) {
+            const id = privateChatMatch[1];
+            // If it's just a positive number (no minus sign), it's a private chat, not a channel
+            if (!/^-/.test(id)) {
+                return false;
+            }
+        }
+
         // Detect if this is a Telegram channel URL
         const channelPatterns = [
-            // Numeric channel IDs (like -1001134948258)
-            /web\.telegram\.org.*[#\/](-\d+)/,
+            // Numeric channel IDs - ONLY negative IDs starting with -100 (like -1001134948258)
+            // These are supergroups/channels, not private chats
+            /[#\/](-100\d+)/,
+            // Public channels on t.me with /c/ prefix (these are numeric channel links)
             /t\.me\/c\/(\d+)/,
             // Named channels on web.telegram.org (after #)
             /web\.telegram\.org.*#@?([a-zA-Z0-9_][a-zA-Z0-9_]{4,31})/,
