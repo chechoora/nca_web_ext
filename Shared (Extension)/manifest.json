@@ -1,5 +1,6 @@
 {
     "manifest_version": 3,
+    "default_locale": "en",
     "name": "No Channels Allowed",
     "version": "1.1",
     "description": "Block all Telegram channels from loading",
