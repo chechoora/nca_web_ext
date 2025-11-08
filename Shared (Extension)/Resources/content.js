@@ -246,72 +246,116 @@ class TelegramChannelBlocker {
     }
 
     removeOverlay() {
-        const overlay = document.getElementById('telegram-channel-blocker-overlay');
-        if (overlay) {
-            overlay.remove();
-        }
+        // Simple, direct removal of all overlays
+        const overlays = document.querySelectorAll('#telegram-channel-blocker-overlay');
+        overlays.forEach(overlay => {
+            if (overlay && overlay.parentNode) {
+                overlay.parentNode.removeChild(overlay);
+            }
+        });
     }
 
     blockCurrentChannel(channelName) {
-        // Remove any existing overlay first
+        console.log('blockCurrentChannel called for:', channelName);
+        // Remove any existing overlay and create new one
         this.removeOverlay();
+        this.createBlockOverlay(channelName);
+    }
 
-        // Create blocking overlay
+    createBlockOverlay(channelName) {
+        console.log('createBlockOverlay called for:', channelName);
+        // Double-check no overlay exists before creating
+        const existing = document.getElementById('telegram-channel-blocker-overlay');
+        if (existing) {
+            console.log('Overlay already exists, skipping creation');
+            return;
+        }
+        console.log('Creating new overlay');
+
+        // Create blocking overlay with simplified structure
         const overlay = document.createElement('div');
         overlay.id = 'telegram-channel-blocker-overlay';
-        overlay.innerHTML = `
-            <div style="
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                background-color: rgba(0, 0, 0, 0.95);
-                color: white;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                z-index: 999999;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                text-align: center;
-                padding: 20px;
-                box-sizing: border-box;
-            ">
-                <h1 style="margin-bottom: 20px; font-size: 48px;">🚫</h1>
-                <h2 style="margin-bottom: 20px; color: #ff4444; font-size: 28px;">Channel Blocked</h2>
-                <p style="margin-bottom: 10px; font-size: 18px; max-width: 600px; line-height: 1.5;">
-                    This channel is blocked by No Channels Allowed.
-                </p>
-                <p style="margin-bottom: 30px; font-size: 16px; color: #aaa;">
-                    Channel: <strong style="color: white;">${this.escapeHtml(channelName)}</strong>
-                </p>
-                <p style="margin-bottom: 30px; font-size: 14px; color: #888;">
-                    Use the extension popup to manage whitelisted channels
-                </p>
-                <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
-                    <button id="go-back-btn" style="
-                        padding: 12px 24px;
-                        background-color: #666;
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                        cursor: pointer;
-                        font-size: 16px;
-                        transition: background-color 0.2s;
-                    ">Go Back</button>
-                </div>
-            </div>
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.95);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2147483647;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
         `;
 
-        document.documentElement.appendChild(overlay);
+        // Create content container
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <h1 style="margin-bottom: 20px; font-size: 48px;">🚫</h1>
+            <h2 style="margin-bottom: 20px; color: #ff4444; font-size: 28px;">Channel Blocked</h2>
+            <p style="margin-bottom: 10px; font-size: 18px; max-width: 600px; line-height: 1.5;">
+                This channel is blocked by No Channels Allowed.
+            </p>
+            <p style="margin-bottom: 30px; font-size: 16px; color: #aaa;">
+                Channel: <strong style="color: white;">${this.escapeHtml(channelName)}</strong>
+            </p>
+            <p style="margin-bottom: 30px; font-size: 14px; color: #888;">
+                Use the extension popup to manage whitelisted channels
+            </p>
+        `;
 
-        // Add event listener for go back button
-        const goBackBtn = document.getElementById('go-back-btn');
-        if (goBackBtn) {
-            goBackBtn.addEventListener('click', () => {
-                window.history.back();
-            });
+        // Create go to home button
+        const goBackBtn = document.createElement('button');
+        goBackBtn.textContent = 'Go to Home';
+        goBackBtn.style.cssText = `
+            padding: 12px 24px;
+            background-color: #666;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        `;
+        // Arrow function automatically binds 'this' context
+        goBackBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Remove overlay first
+            this.removeOverlay();
+
+            // Use hash navigation for SPA (no page reload, no white screen)
+            if (window.location.href.includes('web.telegram.org')) {
+                // For web.telegram.org, use hash navigation to avoid reload
+                window.location.hash = '';
+            } else if (window.location.href.includes('t.me')) {
+                // For t.me, redirect to home
+                window.location.href = 'https://t.me/';
+            } else {
+                // Default: navigate to web telegram
+                window.location.href = 'https://web.telegram.org/a/';
+            }
+        });
+
+        content.appendChild(goBackBtn);
+        overlay.appendChild(content);
+
+        // Append to documentElement for maximum reliability
+        try {
+            if (document.documentElement) {
+                document.documentElement.appendChild(overlay);
+            } else if (document.body) {
+                document.body.appendChild(overlay);
+            }
+        } catch (e) {
+            console.error('Failed to append overlay:', e);
         }
     }
 
