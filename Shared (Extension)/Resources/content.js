@@ -281,7 +281,7 @@ class TelegramChannelBlocker {
                 <h1 style="margin-bottom: 20px; font-size: 48px;">🚫</h1>
                 <h2 style="margin-bottom: 20px; color: #ff4444; font-size: 28px;">Channel Blocked</h2>
                 <p style="margin-bottom: 10px; font-size: 18px; max-width: 600px; line-height: 1.5;">
-                    This channel is blocked by Telegram Channel Blocker.
+                    This channel is blocked by No Channels Allowed.
                 </p>
                 <p style="margin-bottom: 30px; font-size: 16px; color: #aaa;">
                     Channel: <strong style="color: white;">${this.escapeHtml(channelName)}</strong>
@@ -348,7 +348,7 @@ class TelegramChannelBlocker {
         link.style.opacity = '0.3';
         link.style.textDecoration = 'line-through';
         link.style.pointerEvents = 'none';
-        link.title = 'This channel is blocked by Telegram Channel Blocker';
+        link.title = 'This channel is blocked by No Channels Allowed';
 
         // Prevent clicking
         link.addEventListener('click', (e) => {
