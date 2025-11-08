@@ -1,4 +1,4 @@
-// Telegram Channel Blocker Content Script
+// Telegram Channel Blocker Content Script - Safari Compatible
 
 class TelegramChannelBlocker {
     constructor() {
@@ -21,7 +21,7 @@ class TelegramChannelBlocker {
         this.startChannelMonitoring();
         
         // Listen for messages from popup/background
-        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return this.handleMessage(message, sender, sendResponse);
         });
 
@@ -35,7 +35,7 @@ class TelegramChannelBlocker {
 
     async loadBlockedChannels() {
         try {
-            const result = await chrome.storage.local.get(['blockedChannels', 'isBlocking']);
+            const result = await browser.storage.local.get(['blockedChannels', 'isBlocking']);
             this.blockedChannels = new Set(result.blockedChannels || []);
             this.isBlocking = result.isBlocking !== false; // Default to true
             console.log("Loaded blocked channels:", Array.from(this.blockedChannels));
@@ -49,7 +49,7 @@ class TelegramChannelBlocker {
 
     async saveBlockedChannels() {
         try {
-            await chrome.storage.local.set({
+            await browser.storage.local.set({
                 blockedChannels: Array.from(this.blockedChannels),
                 isBlocking: this.isBlocking
             });
@@ -63,28 +63,15 @@ class TelegramChannelBlocker {
     }
 
     startChannelMonitoring() {
-        // Monitor for navigation changes (for single-page app behavior)
-        let lastUrl = location.href;
-        
-        const checkForChannels = () => {
-            if (location.href !== lastUrl) {
-                lastUrl = location.href;
-                this.checkCurrentPage();
-            }
-            
-            // Also check for dynamically loaded content
-            this.blockChannelsInView();
-        };
-
         // Check immediately
         this.checkCurrentPage();
 
         // Set up observers for dynamic content
         const observer = new MutationObserver(() => {
-            checkForChannels();
+            this.checkCurrentPage();
         });
 
-        // Wait for body to be available (important for PWAs)
+        // Wait for body to be available
         const startObserving = () => {
             if (document.body) {
                 observer.observe(document.body, {
@@ -97,20 +84,25 @@ class TelegramChannelBlocker {
         };
         startObserving();
 
-        // Enhanced monitoring for PWA navigation
-        window.addEventListener('popstate', checkForChannels);
-        window.addEventListener('pushstate', checkForChannels);
-        window.addEventListener('replacestate', checkForChannels);
-        
-        // Also check periodically for good measure
-        setInterval(checkForChannels, 2000);
-        
-        // PWA-specific: Monitor for visibility changes
+        // Monitor for navigation changes
+        let lastUrl = location.href;
+        const checkUrl = () => {
+            if (location.href !== lastUrl) {
+                lastUrl = location.href;
+                this.checkCurrentPage();
+            }
+        };
+
+        // Multiple monitoring approaches for SPA
+        window.addEventListener('popstate', checkUrl);
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
-                setTimeout(checkForChannels, 100);
+                setTimeout(checkUrl, 100);
             }
         });
+        
+        // Periodic check
+        setInterval(checkUrl, 2000);
     }
 
     checkCurrentPage() {
@@ -136,11 +128,16 @@ class TelegramChannelBlocker {
     }
 
     extractChannelName(url) {
-        // Extract channel name from various Telegram URL formats
+        // Extract channel name or ID from various Telegram URL formats
+        // IMPORTANT: Check numeric IDs FIRST before alphabetic patterns
         const patterns = [
-            /t\.me\/([^\/\?]+)/,
-            /telegram\.org\/([^\/\?]+)/,
-            /web\.telegram\.org.*#@([^\/\?]+)/
+            // Numeric channel IDs (like -1001134948258) - CHECK THESE FIRST
+            /web\.telegram\.org.*[#\/](-\d+)/,
+            /t\.me\/c\/(\d+)/,
+            // Named channels (check after numeric patterns)
+            /t\.me\/([^\/\?#]+)/,
+            /telegram\.org\/([^\/\?#]+)/,
+            /web\.telegram\.org.*[#\/]@?([a-zA-Z][^\/\?#]*)/
         ];
 
         for (const pattern of patterns) {
@@ -154,6 +151,10 @@ class TelegramChannelBlocker {
     }
 
     blockCurrentChannel() {
+        // Remove any existing overlay first
+        const existing = document.getElementById('telegram-channel-blocker-overlay');
+        if (existing) return;
+
         // Create blocking overlay
         const overlay = document.createElement('div');
         overlay.id = 'telegram-channel-blocker-overlay';
@@ -164,25 +165,25 @@ class TelegramChannelBlocker {
                 left: 0;
                 width: 100vw;
                 height: 100vh;
-                background-color: rgba(0, 0, 0, 0.9);
+                background-color: rgba(0, 0, 0, 0.95);
                 color: white;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                z-index: 10000;
+                z-index: 999999;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                 text-align: center;
                 padding: 20px;
                 box-sizing: border-box;
             ">
                 <h1 style="margin-bottom: 20px; font-size: 48px;">🚫</h1>
-                <h2 style="margin-bottom: 20px; color: #ff4444;">Channel Blocked</h2>
+                <h2 style="margin-bottom: 20px; color: #ff4444; font-size: 28px;">Channel Blocked</h2>
                 <p style="margin-bottom: 30px; font-size: 18px; max-width: 600px; line-height: 1.5;">
                     This Telegram channel has been blocked by your extension.
                 </p>
                 <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
-                    <button id="unblock-channel" style="
+                    <button id="unblock-channel-btn" style="
                         padding: 12px 24px;
                         background-color: #0088cc;
                         color: white;
@@ -192,7 +193,7 @@ class TelegramChannelBlocker {
                         font-size: 16px;
                         transition: background-color 0.2s;
                     ">Unblock This Channel</button>
-                    <button id="go-back" style="
+                    <button id="go-back-btn" style="
                         padding: 12px 24px;
                         background-color: #666;
                         color: white;
@@ -206,20 +207,27 @@ class TelegramChannelBlocker {
             </div>
         `;
 
-        document.body.appendChild(overlay);
+        document.documentElement.appendChild(overlay);
 
         // Add event listeners
-        document.getElementById('unblock-channel').addEventListener('click', () => {
-            const channelName = this.extractChannelName(location.href);
-            if (channelName) {
-                this.unblockChannel(channelName);
-                overlay.remove();
-            }
-        });
+        const unblockBtn = document.getElementById('unblock-channel-btn');
+        const goBackBtn = document.getElementById('go-back-btn');
 
-        document.getElementById('go-back').addEventListener('click', () => {
-            window.history.back();
-        });
+        if (unblockBtn) {
+            unblockBtn.addEventListener('click', () => {
+                const channelName = this.extractChannelName(location.href);
+                if (channelName) {
+                    this.unblockChannel(channelName);
+                    overlay.remove();
+                }
+            });
+        }
+
+        if (goBackBtn) {
+            goBackBtn.addEventListener('click', () => {
+                window.history.back();
+            });
+        }
     }
 
     blockChannelsInView() {
@@ -230,13 +238,10 @@ class TelegramChannelBlocker {
         
         links.forEach(link => {
             const href = link.getAttribute('href');
-            if (this.isChannelBlocked(href)) {
+            if (href && this.isChannelBlocked(href)) {
                 this.blockLink(link);
             }
         });
-
-        // Also look for channel mentions in text
-        this.blockChannelMentions();
     }
 
     blockLink(link) {
@@ -253,52 +258,7 @@ class TelegramChannelBlocker {
             e.preventDefault();
             e.stopPropagation();
             this.showBlockedMessage();
-        });
-    }
-
-    blockChannelMentions() {
-        // Block @channel mentions in text
-        const walker = document.createTreeWalker(
-            document.body,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
-
-        const textNodes = [];
-        let node;
-        while (node = walker.nextNode()) {
-            textNodes.push(node);
-        }
-
-        textNodes.forEach(textNode => {
-            if (textNode.parentElement?.classList.contains('telegram-blocked')) return;
-
-            const text = textNode.textContent;
-            const mentionPattern = /@([a-zA-Z0-9_]+)/g;
-            let match;
-            let hasBlockedMention = false;
-
-            while ((match = mentionPattern.exec(text)) !== null) {
-                const channelName = match[1];
-                if (this.blockedChannels.has(channelName.toLowerCase())) {
-                    hasBlockedMention = true;
-                    break;
-                }
-            }
-
-            if (hasBlockedMention) {
-                const span = document.createElement('span');
-                span.classList.add('telegram-blocked');
-                span.innerHTML = text.replace(mentionPattern, (match, channelName) => {
-                    if (this.blockedChannels.has(channelName.toLowerCase())) {
-                        return `<span style="opacity: 0.3; text-decoration: line-through;">@${channelName}</span>`;
-                    }
-                    return match;
-                });
-                textNode.parentNode.replaceChild(span, textNode);
-            }
-        });
+        }, true);
     }
 
     showBlockedMessage() {
@@ -312,7 +272,7 @@ class TelegramChannelBlocker {
             color: white;
             padding: 15px 20px;
             border-radius: 8px;
-            z-index: 10001;
+            z-index: 999998;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             transition: opacity 0.3s;
@@ -346,6 +306,10 @@ class TelegramChannelBlocker {
             el.classList.remove('telegram-blocked');
         });
         
+        // Remove overlay
+        const overlay = document.getElementById('telegram-channel-blocker-overlay');
+        if (overlay) overlay.remove();
+        
         console.log("Unblocked channel:", channelName);
     }
 
@@ -372,6 +336,8 @@ class TelegramChannelBlocker {
     }
 
     handleMessage(message, sender, sendResponse) {
+        console.log("Content script received message:", message);
+        
         switch (message.action) {
             case 'blockChannel':
                 this.blockChannel(message.channelName).then(() => {
@@ -386,7 +352,7 @@ class TelegramChannelBlocker {
                 return true;
                 
             case 'getBlockedChannels':
-                sendResponse({ 
+                sendResponse({
                     blockedChannels: Array.from(this.blockedChannels),
                     isBlocking: this.isBlocking
                 });
@@ -400,41 +366,21 @@ class TelegramChannelBlocker {
                 
             case 'getCurrentChannel':
                 const channelName = this.extractChannelName(location.href);
-                sendResponse({ 
+                sendResponse({
                     channelName,
                     isBlocked: channelName ? this.blockedChannels.has(channelName.toLowerCase()) : false
                 });
                 break;
+                
+            case 'settingsUpdated':
+                this.loadBlockedChannels().then(() => {
+                    this.checkCurrentPage();
+                    sendResponse({ success: true });
+                });
+                return true;
         }
-    }
-
-    // Debug function to test the extension manually
-    debug() {
-        console.log("=== Telegram Channel Blocker Debug Info ===");
-        console.log("Current URL:", window.location.href);
-        console.log("Is blocking enabled:", this.isBlocking);
-        console.log("Blocked channels:", Array.from(this.blockedChannels));
-        console.log("Current channel:", this.extractChannelName(window.location.href));
-        console.log("Is current channel blocked:", this.isChannelBlocked(window.location.href));
-        console.log("===========================================");
-        
-        // Test blocking a channel
-        if (!this.blockedChannels.has('testchannel')) {
-            console.log("Adding test channel for debugging...");
-            this.blockChannel('testchannel');
-        }
-        
-        return {
-            url: window.location.href,
-            isBlocking: this.isBlocking,
-            blockedChannels: Array.from(this.blockedChannels),
-            currentChannel: this.extractChannelName(window.location.href)
-        };
     }
 }
 
 // Initialize the blocker
 const telegramChannelBlocker = new TelegramChannelBlocker();
-
-// Make debug function available globally for console testing
-window.telegramChannelBlockerDebug = () => telegramChannelBlocker.debug();

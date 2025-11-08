@@ -1,4 +1,4 @@
-// Telegram Channel Blocker Popup Script
+// Telegram Channel Blocker Popup Script - Safari Compatible
 
 class TelegramChannelBlockerPopup {
     constructor() {
@@ -9,6 +9,15 @@ class TelegramChannelBlockerPopup {
     }
 
     init() {
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.initializePopup());
+        } else {
+            this.initializePopup();
+        }
+    }
+
+    initializePopup() {
         this.initializeElements();
         this.attachEventListeners();
         this.loadSettings();
@@ -33,38 +42,46 @@ class TelegramChannelBlockerPopup {
 
     attachEventListeners() {
         // Toggle blocking
-        this.elements.blockingToggle.addEventListener('click', () => {
-            this.toggleBlocking();
-        });
+        if (this.elements.blockingToggle) {
+            this.elements.blockingToggle.addEventListener('click', () => {
+                this.toggleBlocking();
+            });
+        }
 
         // Add channel
-        this.elements.addButton.addEventListener('click', () => {
-            this.addChannel();
-        });
+        if (this.elements.addButton) {
+            this.elements.addButton.addEventListener('click', () => {
+                this.addChannel();
+            });
+        }
 
         // Add channel with Enter key
-        this.elements.channelInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.addChannel();
-            }
-        });
+        if (this.elements.channelInput) {
+            this.elements.channelInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.addChannel();
+                }
+            });
+
+            // Input validation
+            this.elements.channelInput.addEventListener('input', () => {
+                this.validateInput();
+            });
+        }
 
         // Quick action for current page
-        this.elements.quickActionButton.addEventListener('click', () => {
-            this.handleQuickAction();
-        });
-
-        // Input validation
-        this.elements.channelInput.addEventListener('input', () => {
-            this.validateInput();
-        });
+        if (this.elements.quickActionButton) {
+            this.elements.quickActionButton.addEventListener('click', () => {
+                this.handleQuickAction();
+            });
+        }
     }
 
     async loadSettings() {
         try {
             const response = await browser.runtime.sendMessage({ action: 'getSettings' });
             
-            if (response.error) {
+            if (response && response.error) {
                 throw new Error(response.error);
             }
 
@@ -72,7 +89,7 @@ class TelegramChannelBlockerPopup {
             this.updateBlockingToggle(response.isBlocking);
             
             // Update blocked channels list
-            this.updateBlockedChannelsList(response.blockedChannels);
+            this.updateBlockedChannelsList(response.blockedChannels || []);
             
             this.updateStatus("Settings loaded");
         } catch (error) {
@@ -91,8 +108,8 @@ class TelegramChannelBlockerPopup {
             }
 
             // Get current channel information from content script
-            const response = await browser.tabs.sendMessage(activeTab.id, { 
-                action: 'getCurrentChannel' 
+            const response = await browser.tabs.sendMessage(activeTab.id, {
+                action: 'getCurrentChannel'
             });
 
             if (response && response.channelName) {
@@ -113,21 +130,27 @@ class TelegramChannelBlockerPopup {
     }
 
     showCurrentPageSection() {
-        if (!this.currentChannel) return;
+        if (!this.currentChannel || !this.elements.currentPageSection) return;
 
         this.elements.currentPageSection.style.display = 'block';
-        this.elements.currentPageInfo.textContent = `Channel: @${this.currentChannel}`;
+        if (this.elements.currentPageInfo) {
+            this.elements.currentPageInfo.textContent = `Channel: @${this.currentChannel}`;
+        }
         
-        if (this.isCurrentChannelBlocked) {
-            this.elements.quickActionButton.textContent = 'Unblock This Channel';
-            this.elements.quickActionButton.classList.add('unblock');
-        } else {
-            this.elements.quickActionButton.textContent = 'Block This Channel';
-            this.elements.quickActionButton.classList.remove('unblock');
+        if (this.elements.quickActionButton) {
+            if (this.isCurrentChannelBlocked) {
+                this.elements.quickActionButton.textContent = 'Unblock This Channel';
+                this.elements.quickActionButton.classList.add('unblock');
+            } else {
+                this.elements.quickActionButton.textContent = 'Block This Channel';
+                this.elements.quickActionButton.classList.remove('unblock');
+            }
         }
     }
 
     updateBlockingToggle(isBlocking) {
+        if (!this.elements.blockingToggle) return;
+        
         if (isBlocking) {
             this.elements.blockingToggle.classList.add('active');
         } else {
@@ -139,13 +162,13 @@ class TelegramChannelBlockerPopup {
         try {
             const response = await browser.runtime.sendMessage({ action: 'toggleBlocking' });
             
-            if (response.error) {
+            if (response && response.error) {
                 throw new Error(response.error);
             }
 
             this.updateBlockingToggle(response.isBlocking);
             this.showMessage(
-                response.isBlocking ? "Blocking enabled" : "Blocking disabled", 
+                response.isBlocking ? "Blocking enabled" : "Blocking disabled",
                 "success"
             );
             
@@ -157,6 +180,8 @@ class TelegramChannelBlockerPopup {
     }
 
     validateInput() {
+        if (!this.elements.channelInput || !this.elements.addButton) return;
+        
         const channelName = this.elements.channelInput.value.trim();
         const isValid = channelName.length > 0;
         
@@ -164,6 +189,8 @@ class TelegramChannelBlockerPopup {
     }
 
     async addChannel() {
+        if (!this.elements.channelInput) return;
+        
         const channelName = this.elements.channelInput.value.trim();
         
         if (!channelName) {
@@ -175,16 +202,16 @@ class TelegramChannelBlockerPopup {
         const normalizedName = channelName.replace('@', '');
         
         try {
-            const response = await browser.runtime.sendMessage({ 
-                action: 'addBlockedChannel', 
-                channelName: normalizedName 
+            const response = await browser.runtime.sendMessage({
+                action: 'addBlockedChannel',
+                channelName: normalizedName
             });
             
-            if (response.error) {
+            if (response && response.error) {
                 throw new Error(response.error);
             }
 
-            this.updateBlockedChannelsList(response.blockedChannels);
+            this.updateBlockedChannelsList(response.blockedChannels || []);
             this.elements.channelInput.value = '';
             this.validateInput();
             this.showMessage(`Channel @${normalizedName} blocked successfully`, "success");
@@ -203,16 +230,16 @@ class TelegramChannelBlockerPopup {
 
     async removeChannel(channelName) {
         try {
-            const response = await browser.runtime.sendMessage({ 
-                action: 'removeBlockedChannel', 
-                channelName 
+            const response = await browser.runtime.sendMessage({
+                action: 'removeBlockedChannel',
+                channelName
             });
             
-            if (response.error) {
+            if (response && response.error) {
                 throw new Error(response.error);
             }
 
-            this.updateBlockedChannelsList(response.blockedChannels);
+            this.updateBlockedChannelsList(response.blockedChannels || []);
             this.showMessage(`Channel @${channelName} unblocked successfully`, "success");
             this.updateStatus(`Unblocked @${channelName}`);
             
@@ -235,16 +262,16 @@ class TelegramChannelBlockerPopup {
         } else {
             // Add current channel to blocked list
             try {
-                const response = await browser.runtime.sendMessage({ 
-                    action: 'addBlockedChannel', 
-                    channelName: this.currentChannel 
+                const response = await browser.runtime.sendMessage({
+                    action: 'addBlockedChannel',
+                    channelName: this.currentChannel
                 });
                 
-                if (response.error) {
+                if (response && response.error) {
                     throw new Error(response.error);
                 }
 
-                this.updateBlockedChannelsList(response.blockedChannels);
+                this.updateBlockedChannelsList(response.blockedChannels || []);
                 this.isCurrentChannelBlocked = true;
                 this.showCurrentPageSection();
                 this.showMessage(`Channel @${this.currentChannel} blocked successfully`, "success");
@@ -257,10 +284,12 @@ class TelegramChannelBlockerPopup {
     }
 
     updateBlockedChannelsList(blockedChannels) {
+        if (!this.elements.channelCount || !this.elements.blockedChannelsList) return;
+        
         this.elements.channelCount.textContent = blockedChannels.length;
         
         if (blockedChannels.length === 0) {
-            this.elements.blockedChannelsList.innerHTML = 
+            this.elements.blockedChannelsList.innerHTML =
                 '<div class="empty-state">No channels blocked yet</div>';
             return;
         }
@@ -270,16 +299,28 @@ class TelegramChannelBlockerPopup {
             .map(channel => `
                 <div class="channel-item">
                     <span class="channel-name">@${channel}</span>
-                    <button class="remove-button" onclick="popup.removeChannel('${channel}')">
+                    <button class="remove-button" data-channel="${channel}">
                         Remove
                     </button>
                 </div>
             `).join('');
 
         this.elements.blockedChannelsList.innerHTML = channelsHtml;
+        
+        // Add event listeners to remove buttons
+        this.elements.blockedChannelsList.querySelectorAll('.remove-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const channelName = e.target.getAttribute('data-channel');
+                if (channelName) {
+                    this.removeChannel(channelName);
+                }
+            });
+        });
     }
 
     showMessage(message, type = 'info') {
+        if (!this.elements.messageContainer) return;
+        
         const messageDiv = document.createElement('div');
         messageDiv.className = `${type}-message`;
         messageDiv.textContent = message;
@@ -296,7 +337,9 @@ class TelegramChannelBlockerPopup {
     }
 
     updateStatus(status) {
-        this.elements.statusText.textContent = status;
+        if (this.elements.statusText) {
+            this.elements.statusText.textContent = status;
+        }
     }
 }
 

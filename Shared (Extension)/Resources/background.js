@@ -7,7 +7,7 @@ class TelegramChannelBlockerBackground {
 
     init() {
         // Listen for messages from content script and popup
-        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             this.handleMessage(message, sender, sendResponse)
                 .then(result => sendResponse(result))
                 .catch(error => sendResponse({ error: error.message }));
@@ -15,7 +15,7 @@ class TelegramChannelBlockerBackground {
         });
 
         // Handle extension installation
-        chrome.runtime.onInstalled.addListener((details) => {
+        browser.runtime.onInstalled.addListener((details) => {
             this.handleInstallation(details);
         });
 
@@ -25,7 +25,7 @@ class TelegramChannelBlockerBackground {
     async handleInstallation(details) {
         if (details.reason === 'install') {
             // Set up default settings
-            await chrome.storage.local.set({
+            await browser.storage.local.set({
                 blockedChannels: [],
                 isBlocking: true,
                 blockingEnabled: true
