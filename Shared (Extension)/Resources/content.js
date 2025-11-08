@@ -1,8 +1,10 @@
 // Telegram Channel Blocker Content Script - Safari Compatible
-// Simplified version - blocks ALL channels
+// Blocks all channels except whitelisted ones
 
 class TelegramChannelBlocker {
     constructor() {
+        this.whitelistedChannels = [];
+        this.isBlocking = true;
         this.init();
     }
 
@@ -13,10 +15,61 @@ class TelegramChannelBlocker {
             return;
         }
 
+        // Load whitelist and blocking status from background
+        await this.loadSettings();
+
+        // Listen for messages from background script
+        browser.runtime.onMessage.addListener((message) => {
+            return this.handleMessage(message);
+        });
+
         // Start monitoring for Telegram channels
         this.startChannelMonitoring();
 
-        console.log("Telegram Channel Blocker initialized - blocking ALL channels on:", window.location.href);
+        console.log("Telegram Channel Blocker initialized on:", window.location.href);
+        console.log("Whitelisted channels:", this.whitelistedChannels);
+        console.log("Blocking enabled:", this.isBlocking);
+    }
+
+    async loadSettings() {
+        try {
+            const whitelistResponse = await browser.runtime.sendMessage({ action: 'getWhitelist' });
+            if (whitelistResponse && whitelistResponse.success) {
+                this.whitelistedChannels = whitelistResponse.channels || [];
+            }
+
+            const statusResponse = await browser.runtime.sendMessage({ action: 'getBlockingStatus' });
+            if (statusResponse && statusResponse.success) {
+                this.isBlocking = statusResponse.isBlocking !== false;
+            }
+        } catch (error) {
+            console.error("Failed to load settings:", error);
+        }
+    }
+
+    handleMessage(message) {
+        if (message.action === 'whitelistUpdated') {
+            this.whitelistedChannels = message.channels || [];
+            console.log("Whitelist updated:", this.whitelistedChannels);
+
+            // Remove overlay if current channel is now whitelisted
+            const currentChannel = this.extractChannelName(location.href);
+            if (currentChannel && this.isChannelWhitelisted(currentChannel)) {
+                this.removeOverlay();
+            } else {
+                // Re-check the page
+                this.checkCurrentPage();
+            }
+        } else if (message.action === 'blockingStatusChanged') {
+            this.isBlocking = message.isBlocking;
+            console.log("Blocking status changed:", this.isBlocking);
+
+            if (!this.isBlocking) {
+                this.removeOverlay();
+            } else {
+                this.checkCurrentPage();
+            }
+        }
     }
 
     isRelevantPage() {
@@ -70,16 +123,71 @@ class TelegramChannelBlocker {
     }
 
     checkCurrentPage() {
+        // If blocking is disabled, don't block anything
+        if (!this.isBlocking) {
+            return;
+        }
+
         const currentUrl = location.href;
 
-        // Check if current page is a channel - block it if it is
+        // Check if current page is a channel
         if (this.isChannel(currentUrl)) {
-            this.blockCurrentChannel();
-            return;
+            const channelName = this.extractChannelName(currentUrl);
+
+            // Only block if channel is NOT whitelisted
+            if (channelName && !this.isChannelWhitelisted(channelName)) {
+                this.blockCurrentChannel(channelName);
+                return;
+            }
         }
 
         // Block channel links and elements on the page
         this.blockChannelsInView();
+    }
+
+    isChannelWhitelisted(channelName) {
+        // Normalize channel name for comparison
+        const normalized = channelName.toLowerCase().replace(/^@/, '');
+        return this.whitelistedChannels.includes(normalized);
+    }
+
+    extractChannelName(url) {
+        // IMPORTANT: Check for numeric channel IDs FIRST (with -100 prefix for supergroups/channels)
+        const numericPattern = /[#\/](-100\d+)/;
+        const numericMatch = url.match(numericPattern);
+        if (numericMatch && numericMatch[1]) {
+            return numericMatch[1]; // Returns the full numeric ID including the minus sign
+        }
+
+        // Check for /c/ format numeric channels on t.me
+        const cPattern = /t\.me\/c\/(\d+)/;
+        const cMatch = url.match(cPattern);
+        if (cMatch && cMatch[1]) {
+            return cMatch[1];
+        }
+
+        // Named channels on web.telegram.org (after #)
+        const webPattern = /web\.telegram\.org.*#@?([a-zA-Z0-9_][a-zA-Z0-9_]{4,31})/;
+        const webMatch = url.match(webPattern);
+        if (webMatch && webMatch[1]) {
+            return webMatch[1];
+        }
+
+        // Named channels on t.me
+        const tMePattern = /t\.me\/([a-zA-Z0-9_][a-zA-Z0-9_]{4,31})(?:\/|$|\?|#)/;
+        const tMeMatch = url.match(tMePattern);
+        if (tMeMatch && tMeMatch[1]) {
+            return tMeMatch[1];
+        }
+
+        // Named channels on telegram.org
+        const telegramOrgPattern = /telegram\.org\/([a-zA-Z0-9_][a-zA-Z0-9_]{4,31})(?:\/|$|\?|#)/;
+        const telegramOrgMatch = url.match(telegramOrgPattern);
+        if (telegramOrgMatch && telegramOrgMatch[1]) {
+            return telegramOrgMatch[1];
+        }
+
+        return null;
     }
 
     isChannel(url) {
@@ -144,7 +252,7 @@ class TelegramChannelBlocker {
         }
     }
 
-    blockCurrentChannel() {
+    blockCurrentChannel(channelName) {
         // Remove any existing overlay first
         this.removeOverlay();
 
@@ -172,8 +280,14 @@ class TelegramChannelBlocker {
             ">
                 <h1 style="margin-bottom: 20px; font-size: 48px;">🚫</h1>
                 <h2 style="margin-bottom: 20px; color: #ff4444; font-size: 28px;">Channel Blocked</h2>
-                <p style="margin-bottom: 30px; font-size: 18px; max-width: 600px; line-height: 1.5;">
-                    All Telegram channels are blocked by this extension.
+                <p style="margin-bottom: 10px; font-size: 18px; max-width: 600px; line-height: 1.5;">
+                    This channel is blocked by Telegram Channel Blocker.
+                </p>
+                <p style="margin-bottom: 30px; font-size: 16px; color: #aaa;">
+                    Channel: <strong style="color: white;">${this.escapeHtml(channelName)}</strong>
+                </p>
+                <p style="margin-bottom: 30px; font-size: 14px; color: #888;">
+                    Use the extension popup to manage whitelisted channels
                 </p>
                 <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
                     <button id="go-back-btn" style="
@@ -201,14 +315,28 @@ class TelegramChannelBlocker {
         }
     }
 
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     blockChannelsInView() {
-        // Find and block channel links
+        // Find and block channel links (only non-whitelisted ones)
         const links = document.querySelectorAll('a[href*="t.me"], a[href*="telegram.org"]');
 
         links.forEach(link => {
             const href = link.getAttribute('href');
             if (href && this.isChannel(href)) {
-                this.blockLink(link);
+                const channelName = this.extractChannelName(href);
+
+                // Only block if NOT whitelisted
+                if (channelName && !this.isChannelWhitelisted(channelName)) {
+                    this.blockLink(link);
+                } else {
+                    // Remove blocking if it was previously blocked
+                    this.unblockLink(link);
+                }
             }
         });
     }
@@ -230,6 +358,16 @@ class TelegramChannelBlocker {
         }, true);
     }
 
+    unblockLink(link) {
+        if (!link.classList.contains('telegram-blocked')) return;
+
+        link.classList.remove('telegram-blocked');
+        link.style.opacity = '';
+        link.style.textDecoration = '';
+        link.style.pointerEvents = '';
+        link.title = '';
+    }
+
     showBlockedMessage() {
         // Show a brief notification
         const notification = document.createElement('div');
@@ -246,7 +384,7 @@ class TelegramChannelBlocker {
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             transition: opacity 0.3s;
         `;
-        notification.textContent = 'All channels are blocked';
+        notification.textContent = 'This channel is blocked';
 
         document.body.appendChild(notification);
 
