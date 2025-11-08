@@ -125,8 +125,11 @@ class TelegramChannelBlockerPopup {
 
     isRelevantTab(url) {
         if (!url) return false;
+        // Support regular web URLs, PWA URLs, and custom schemes
         const relevantDomains = ['telegram.org', 'web.telegram.org', 't.me'];
-        return relevantDomains.some(domain => url.includes(domain));
+        return relevantDomains.some(domain => url.includes(domain)) ||
+               url.startsWith('web+app://') ||
+               url.startsWith('app://');
     }
 
     showCurrentPageSection() {

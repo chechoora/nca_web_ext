@@ -89,6 +89,8 @@ class TelegramChannelBlocker {
         const checkUrl = () => {
             if (location.href !== lastUrl) {
                 lastUrl = location.href;
+                // Remove overlay when navigating away from blocked channel
+                this.removeOverlay();
                 this.checkCurrentPage();
             }
         };
@@ -100,7 +102,7 @@ class TelegramChannelBlocker {
                 setTimeout(checkUrl, 100);
             }
         });
-        
+
         // Periodic check
         setInterval(checkUrl, 2000);
     }
@@ -150,10 +152,16 @@ class TelegramChannelBlocker {
         return null;
     }
 
+    removeOverlay() {
+        const overlay = document.getElementById('telegram-channel-blocker-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+
     blockCurrentChannel() {
         // Remove any existing overlay first
-        const existing = document.getElementById('telegram-channel-blocker-overlay');
-        if (existing) return;
+        this.removeOverlay();
 
         // Create blocking overlay
         const overlay = document.createElement('div');
@@ -297,7 +305,7 @@ class TelegramChannelBlocker {
     async unblockChannel(channelName) {
         this.blockedChannels.delete(channelName.toLowerCase());
         await this.saveBlockedChannels();
-        
+
         // Remove blocking elements
         document.querySelectorAll('.telegram-blocked').forEach(el => {
             el.style.opacity = '';
@@ -305,18 +313,17 @@ class TelegramChannelBlocker {
             el.style.pointerEvents = '';
             el.classList.remove('telegram-blocked');
         });
-        
+
         // Remove overlay
-        const overlay = document.getElementById('telegram-channel-blocker-overlay');
-        if (overlay) overlay.remove();
-        
+        this.removeOverlay();
+
         console.log("Unblocked channel:", channelName);
     }
 
     async toggleBlocking() {
         this.isBlocking = !this.isBlocking;
         await this.saveBlockedChannels();
-        
+
         if (this.isBlocking) {
             this.checkCurrentPage();
         } else {
@@ -327,11 +334,10 @@ class TelegramChannelBlocker {
                 el.style.pointerEvents = '';
                 el.classList.remove('telegram-blocked');
             });
-            
-            const overlay = document.getElementById('telegram-channel-blocker-overlay');
-            if (overlay) overlay.remove();
+
+            this.removeOverlay();
         }
-        
+
         return this.isBlocking;
     }
 

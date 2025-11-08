@@ -13,7 +13,9 @@
     "host_permissions": [
         "*://t.me/*",
         "*://telegram.org/*",
-        "*://web.telegram.org/*"
+        "*://web.telegram.org/*",
+        "*://*.telegram.org/*",
+        "file:///*"
     ],
     
     "background": {
@@ -24,11 +26,13 @@
     "content_scripts": [{
         "matches": [
             "*://t.me/*",
-            "*://telegram.org/*", 
-            "*://web.telegram.org/*"
+            "*://telegram.org/*",
+            "*://web.telegram.org/*",
+            "*://*.telegram.org/*"
         ],
         "js": ["content.js"],
-        "run_at": "document_start"
+        "run_at": "document_start",
+        "all_frames": true
     }],
     
     "action": {
@@ -41,7 +45,8 @@
         "matches": [
             "*://t.me/*",
             "*://telegram.org/*",
-            "*://web.telegram.org/*"
+            "*://web.telegram.org/*",
+            "*://*.telegram.org/*"
         ]
     }]
 }
